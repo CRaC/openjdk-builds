@@ -1,3 +1,5 @@
 # Builds of openjdk/crac
 
-[Javadoc](./javadoc/index.html)
+Builds: https://github.com/CRaC/openjdk-builds/releases
+
+[Latest javadoc](./javadoc/api/java.base/jdk/crac/package-summary.html)
