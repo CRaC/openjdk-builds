@@ -259,6 +259,7 @@ module:jdk.jstatd
 module:jdk.localedata
 module:jdk.management
 com.sun.management
+jdk.crac.management
 module:jdk.management.agent
 module:jdk.management.jfr
 jdk.management.jfr
