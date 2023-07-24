@@ -25,12 +25,15 @@
 
 package java.io;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
+import jdk.crac.Context;
+import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.*;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -54,6 +57,72 @@ public final class FileDescriptor {
     private Closeable parent;
     private List<Closeable> otherParents;
     private boolean closed;
+
+    class Resource extends JDKFdResource {
+        private boolean closedByNIO;
+
+        @SuppressWarnings("fallthrough")
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            if (!closedByNIO && valid()) {
+                ClaimedFDs claimedFDs = Core.getClaimedFDs();
+                FileDescriptor self = FileDescriptor.this;
+                String nativeDescription = nativeDescription0();
+
+                OpenResourcePolicies.Policy policy = findPolicy(nativeDescription);
+                String action = "error";
+                Supplier<Exception> supplier = null;
+                // Normally the claiming should be overridden by FileInputStream/FileOutputStream
+                // but in case these are collected we handle FDs 0..2 here as well.
+                if (policy != null) {
+                    action = policy.action;
+                } else if (self == in || self == out || self == err) {
+                    action = "ignore";
+                }
+                supplier = switch (action.toLowerCase()) {
+                    case "error":
+                        yield () -> new CheckpointOpenResourceException(
+                            FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription,
+                            getStackTraceHolder());
+                    case "close":
+                        close();
+                    case "ignore":
+                        warnOpenResource(policy, "File descriptor " + fd);
+                        yield NO_EXCEPTION;
+                    default: throw new IllegalArgumentException("Unknown policy action for file descriptor " + fd + ": " + action);
+                };
+                claimedFDs.claimFd(self, self, supplier);
+            }
+        }
+
+        private OpenResourcePolicies.Policy findPolicy(String nativeDescription) {
+            return OpenResourcePolicies.find(false, "filedescriptor", params -> {
+                String value = params.get("value");
+                if (value != null) {
+                    try {
+                        int expected = Integer.parseInt(value);
+                        if (expected != fd) {
+                            return false;
+                        }
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("Cannot parse file descriptor value '" + value + "'");
+                    }
+                }
+                String regex = params.get("regex");
+                if (regex != null) {
+                    return Pattern.compile(regex).matcher(nativeDescription).find();
+                }
+                return true;
+            });
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getName() + "(FD " + fd + ")";
+        }
+    }
+
+    Resource resource = new Resource();
 
     /**
      * true, if file is opened for appending.
@@ -86,6 +155,11 @@ public final class FileDescriptor {
 
                     public void close(FileDescriptor fdo) throws IOException {
                         fdo.close();
+                    }
+
+                    @Override
+                    public void markClosed(FileDescriptor fdo) {
+                        fdo.resource.closedByNIO = true;
                     }
 
                     /* Register for a normal FileCleanable fd/handle cleanup. */
@@ -296,6 +370,8 @@ public final class FileDescriptor {
         unregisterCleanup();
         close0();
     }
+
+    private native String nativeDescription0();
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

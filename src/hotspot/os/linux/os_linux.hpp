@@ -64,6 +64,7 @@ class Linux {
   static void set_physical_memory(julong phys_mem) { _physical_memory = phys_mem; }
   static int active_processor_count();
 
+  static void initialize_processor_count();
   static void initialize_system_info();
 
   static int commit_memory_impl(char* addr, size_t bytes, bool exec);
@@ -170,17 +171,6 @@ class Linux {
   }
 
   static jlong fast_thread_cpu_time(clockid_t clockid);
-
-  static void vm_create_start();
-  static bool prepare_checkpoint();
-  static Handle checkpoint(bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
-  static void close_extra_descriptors();
-  static void register_persistent_fd(int fd, int st_dev, int st_ino);
-  static void deregister_persistent_fd(int fd, int st_dev, int st_ino);
-
-  static jlong restore_start_time();
-  static jlong uptime_since_restore();
 
   // Determine if the vmid is the parent pid for a child in a PID namespace.
   // Return the namespace pid if so, otherwise -1.
@@ -307,6 +297,13 @@ class Linux {
   static int numa_available() { return _numa_available != NULL ? _numa_available() : -1; }
   static int numa_tonode_memory(void *start, size_t size, int node) {
     return _numa_tonode_memory != NULL ? _numa_tonode_memory(start, size, node) : -1;
+  }
+
+  static void initialize_cpu_count() {
+    initialize_processor_count();
+    if (cpu_to_node() != NULL) {
+      rebuild_cpu_to_node_map();
+    }
   }
 
   static bool is_running_in_interleave_mode() {

@@ -30,17 +30,20 @@ import java.io.FileNotFoundException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.jar.JarFile;
 import java.security.Permission;
 
+import jdk.internal.crac.Core;
 import sun.net.util.URLUtil;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 
 /* A factory for cached JAR file. This class is used to both retrieve
  * and cache Jar files.
+ *
+ * @crac All JarFile instances that are not referenced from elsewhere are
+ * removed from the cache before a checkpoint.
  *
  * @author Benjamin Renaud
  * @since 1.2
@@ -55,11 +58,9 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
 
     private static final JarFileFactory instance = new JarFileFactory();
 
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(instance);
+    private JarFileFactory() {
+        Core.Priority.NORMAL.getContext().register(this);
     }
-
-    private JarFileFactory() { }
 
     public static JarFileFactory getInstance() {
         return instance;
@@ -244,11 +245,6 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
         }
 
         return null;
-    }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.NORMAL;
     }
 
     @Override

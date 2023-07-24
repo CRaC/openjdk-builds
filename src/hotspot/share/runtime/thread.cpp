@@ -77,6 +77,7 @@
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/biasedLocking.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/flags/jvmFlagLimit.hpp"
 #include "runtime/deoptimization.hpp"
@@ -2706,8 +2707,10 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
 
 jint Threads::check_for_restore(JavaVMInitArgs* args) {
   if (Arguments::is_restore_option_set(args)) {
-    Arguments::parse_options_for_restore(args);
-    os::Linux::restore();
+    if (!Arguments::parse_options_for_restore(args)) {
+      return JNI_ERR;
+    }
+    crac::restore();
     if (!CRaCIgnoreRestoreIfUnavailable) {
       // FIXME switch to unified hotspot logging
       warning("cannot restore");
@@ -2783,7 +2786,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     os::pause();
   }
 
-  os::Linux::vm_create_start();
+  crac::vm_create_start();
 
   HOTSPOT_VM_INIT_BEGIN();
 

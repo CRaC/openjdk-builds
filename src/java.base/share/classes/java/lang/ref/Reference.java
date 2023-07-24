@@ -27,6 +27,7 @@ package java.lang.ref;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
@@ -248,8 +249,6 @@ public abstract class Reference<T> {
     private static final Object processPendingLock = new Object();
     private static boolean processPendingActive = false;
 
-    private static JDKResource referenceHandlerResource;
-
     private static void processPendingReferences() {
         // Only the singleton reference processing thread calls
         // waitForReferencePendingList() and getAndClearReferencePendingList().
@@ -331,26 +330,17 @@ public abstract class Reference<T> {
             public void runFinalization() {
                 Finalizer.runFinalization();
             }
+
+            @Override
+            public <T> Reference<? extends T> pollReferenceQueue(ReferenceQueue<T> queue, long timeout) throws InterruptedException {
+                return queue.poll(timeout);
+            }
+
+            @Override
+            public void wakeupReferenceQueue(ReferenceQueue<?> queue) {
+                queue.wakeup();
+            }
         });
-
-        referenceHandlerResource = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.REFERENCE_HANDLER;
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                System.gc();
-                // TODO ensure GC done processing all References
-                while (waitForReferenceProcessing());
-            }
-
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-            }
-        };
-        jdk.internal.crac.Core.getJDKContext().register(referenceHandlerResource);
     }
 
     /* -- Referent accessor and setters -- */

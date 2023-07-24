@@ -48,9 +48,9 @@ import java.util.Arrays;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.Core;
 import jdk.internal.access.JavaNetInetAddressAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.security.action.*;
 import sun.net.InetAddressCachePolicy;
@@ -191,6 +191,12 @@ import sun.nio.cs.UTF_8;
  * A value of -1 indicates "cache forever".
  * </dd>
  * </dl>
+ *
+ * @crac This class holds a cache of resolved hostname-address pairs;
+ * this cache is wiped out before checkpoint. Therefore, lookups after restore
+ * will cause name address resolution.
+ * This ensures that the addresses are up-to-date in the environment where
+ * the process is restored.
  *
  * @author  Chris Warth
  * @see     java.net.InetAddress#getByAddress(byte[])
@@ -352,11 +358,6 @@ public class InetAddress implements java.io.Serializable {
         // or in a different environment should query DNS again.
         checkpointListener = new JDKResource() {
             @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-
-            @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 cache.clear();
                 expirySet.clear();
@@ -366,7 +367,7 @@ public class InetAddress implements java.io.Serializable {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-        Core.getJDKContext().register(checkpointListener);
+        Core.Priority.NORMAL.getContext().register(checkpointListener);
     }
 
     /**

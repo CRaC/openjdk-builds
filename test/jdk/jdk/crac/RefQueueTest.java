@@ -23,11 +23,15 @@
 
 import java.io.*;
 import java.lang.ref.Cleaner;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
@@ -62,5 +66,13 @@ public class RefQueueTest implements CracTest {
 
         // should close the file and only then go to the native checkpoint
         Core.checkpointRestore();
+
+        // ensure that the cleaner starts working eventually
+        CountDownLatch latch = new CountDownLatch(1);
+        cleaner.register(new Object(), () -> {
+            latch.countDown();
+        });
+        System.gc();
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 }
