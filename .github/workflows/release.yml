@@ -49,6 +49,7 @@ jobs:
           CC=gcc-7 CXX=g++-7
           bash ./configure
           --disable-warnings-as-errors
+          --with-build-user=github
           --with-version-pre=crac
           --with-version-build=${{ steps.compute.outputs.BUILDNUMBER }}
           --with-version-opt=${{ github.run_number }}
