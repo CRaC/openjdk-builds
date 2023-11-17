@@ -22,6 +22,8 @@
  */
 
 // no precompiled headers
+#include <string.h>
+
 #include "jvm.h"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
@@ -29,6 +31,7 @@
 #include "runtime/os.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
+#include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
 
 class FdsInfo {
@@ -189,7 +192,7 @@ void FdsInfo::initialize() {
 
   DIR *dir = opendir("/proc/self/fd");
   int dfd = dirfd(dir);
-  while (dp = readdir(dir)) {
+  while ((dp = readdir(dir))) {
     if (dp->d_name[0] == '.') {
       // skip "." and ".."
       continue;
@@ -267,19 +270,25 @@ static int stat2stfail(mode_t mode) {
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
 bool VM_Crac::is_socket_from_jcmd(int sock) {
+#if INCLUDE_SERVICES
   if (_attach_op == NULL)
     return false;
   int sock_fd = _attach_op->socket();
   return sock == sock_fd;
+#else
+  return false;
+#endif
 }
 
 void VM_Crac::report_ok_to_jcmd_if_any() {
+#if INCLUDE_SERVICES
   if (_attach_op == NULL)
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
   _attach_op->effectively_complete_raw(JNI_OK, buf);
   // redirect any further output to console
   _ostream = tty;
+#endif
 }
 
 bool VM_Crac::check_fds() {
@@ -320,6 +329,28 @@ bool VM_Crac::check_fds() {
       }
     }
 
+    if (CRAllowedOpenFilePrefixes != nullptr) {
+      const char *prefix = CRAllowedOpenFilePrefixes;
+      // JDK appends to ccstrlist using newline, on command line that would be comma
+      size_t prefix_length = strcspn(prefix, ",\n");
+      bool matched = false;
+      while (prefix_length > 0) {
+        if (!strncmp(details, prefix, prefix_length)) {
+          matched = true;
+          break;
+        }
+        if (prefix[prefix_length] == '\0') {
+          break;
+        }
+        prefix += prefix_length + 1;
+        prefix_length = strcspn(prefix, ",\n");
+      }
+      if (matched) {
+        print_resources("OK: allowed in -XX:CRAllowedOpenFilePrefixes\n");
+        continue;
+      }
+    }
+
     print_resources("BAD: opened by application\n");
     ok = false;
 
@@ -335,7 +366,7 @@ bool VM_Crac::check_fds() {
 }
 
 bool VM_Crac::memory_checkpoint() {
-  return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
+  return PerfMemoryLinux::checkpoint();
 }
 
 void VM_Crac::memory_restore() {
@@ -378,6 +409,10 @@ static bool is_fd_ignored(int fd, const char *path) {
     return true;
   }
 
+  if (LogConfiguration::is_fd_used(fd)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -393,7 +428,7 @@ static void close_extra_descriptors() {
   struct dirent *dp;
 
   DIR *dir = opendir("/proc/self/fd");
-  while (dp = readdir(dir)) {
+  while ((dp = readdir(dir))) {
     int fd = atoi(dp->d_name);
     if (fd > 2 && fd != dirfd(dir)) {
       int r = readfdlink(fd, path, sizeof(path));

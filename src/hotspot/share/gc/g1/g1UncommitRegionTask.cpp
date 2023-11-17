@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@
 #include "runtime/globals.hpp"
 #include "utilities/ticks.hpp"
 
-G1UncommitRegionTask* G1UncommitRegionTask::_instance = NULL;
+G1UncommitRegionTask* G1UncommitRegionTask::_instance = nullptr;
 
 G1UncommitRegionTask::G1UncommitRegionTask() :
     G1ServiceTask("G1 Uncommit Region Task"),
@@ -38,7 +38,7 @@ G1UncommitRegionTask::G1UncommitRegionTask() :
     _summary_region_count(0) { }
 
 void G1UncommitRegionTask::initialize() {
-  assert(_instance == NULL, "Already initialized");
+  assert(_instance == nullptr, "Already initialized");
   _instance = new G1UncommitRegionTask();
 
   // Register the task with the service thread. This will automatically
@@ -48,7 +48,7 @@ void G1UncommitRegionTask::initialize() {
 }
 
 G1UncommitRegionTask* G1UncommitRegionTask::instance() {
-  if (_instance == NULL) {
+  if (_instance == nullptr) {
     initialize();
   }
   return _instance;
@@ -131,5 +131,13 @@ void G1UncommitRegionTask::execute() {
     set_active(false);
     report_summary();
     clear_summary();
+  }
+}
+
+void G1UncommitRegionTask::finish_collection() {
+  // If _instance is NULL G1 GC is either not in use or its collection has not yet been executed.
+  if (_instance) {
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    g1h->uncommit_regions((uint)-1);
   }
 }

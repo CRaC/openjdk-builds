@@ -45,7 +45,7 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-static int create_cppath(const char *imagedir);
+#define SUPPRESS_ERROR_IN_PARENT 77
 
 static int g_pid;
 
@@ -59,6 +59,63 @@ static int kickjvm(pid_t jvm, int code) {
         return 1;
     }
     return 0;
+}
+
+static void print_args_to_stderr(const char **args) {
+    for (const char **argp = args; *argp != NULL; ++argp) {
+        const char *s = *argp;
+        if (argp != args) {
+            fputc(' ', stderr);
+        }
+        // https://unix.stackexchange.com/a/357932/296319
+        if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+            fputs(s, stderr);
+            continue;
+        }
+        fputc('\'', stderr);
+        for (; *s; ++s) {
+            if (*s != '\'') {
+                fputc(*s, stderr);
+            } else {
+                fputs("'\\''", stderr);
+            }
+        }
+        fputc('\'', stderr);
+    }
+}
+
+static void print_command_args_to_stderr(const char **args) {
+  fprintf(stderr, "Command: ");
+  print_args_to_stderr(args);
+  fputc('\n', stderr);
+}
+
+static const char *join_path(const char *path1, const char *path2) {
+    char *retval;
+    if (asprintf(&retval, "%s/%s", path1, path2) == -1) {
+        perror("asprintf");
+        exit(1);
+    }
+    return retval;
+}
+
+static const char *path_abs(const char *rel) {
+    if (rel[0] == '/') {
+        return rel;
+    }
+    char *cwd = get_current_dir_name();
+    if (!cwd) {
+        perror("get_current_dir_name");
+        exit(1);
+    }
+    return join_path(cwd, rel);
+}
+
+static const char *path_abs2(const char *rel1, const char *rel2) {
+    if (rel2[0] == '/') {
+        return rel2;
+    }
+    return join_path(path_abs(rel1), rel2);
 }
 
 static int checkpoint(pid_t jvm,
@@ -99,52 +156,66 @@ static int checkpoint(pid_t jvm,
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
+    const char* args[32] = {
+        criu,
+        "dump",
+        "-t", jvmpidchar,
+        "-D", imagedir,
+        "--shell-job",
+    };
+    const char** arg = args + 7;
+
+    *arg++ = verbosity != NULL ? verbosity : "-v4";
+    *arg++ = "-o";
+    // -D without -W makes criu cd to image dir for logs
+    const char *log_local = log_file != NULL ? log_file : "dump4.log";
+    *arg++ = log_local;
+
+    if (leave_running) {
+        *arg++ = "-R";
+    }
+
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+        if (criuopt) {
+            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+        }
+    }
+    *arg++ = NULL;
+
     pid_t child = fork();
     if (!child) {
-        const char* args[32] = {
-            criu,
-            "dump",
-            "-t", jvmpidchar,
-            "-D", imagedir,
-            "--shell-job",
-        };
-        const char** arg = args + 7;
-
-        *arg++ = verbosity != NULL ? verbosity : "-v4";
-        *arg++ = "-o";
-        // -D without -W makes criu cd to image dir for logs
-        *arg++ = log_file != NULL ? log_file : "dump4.log";
-
-        if (leave_running) {
-            *arg++ = "-R";
-        }
-
-        char *criuopts = getenv("CRAC_CRIU_OPTS");
-        if (criuopts) {
-            char* criuopt = strtok(criuopts, " ");
-            while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
-                *arg++ = criuopt;
-                criuopt = strtok(NULL, " ");
-            }
-            if (criuopt) {
-                fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
-            }
-        }
-        *arg++ = NULL;
-
         execv(criu, (char**)args);
-        perror("criu dump");
-        exit(1);
+        fprintf(stderr, "Cannot execute CRIU \"");
+        print_args_to_stderr(args);
+        fprintf(stderr, "\": %s\n", strerror(errno));
+        exit(SUPPRESS_ERROR_IN_PARENT);
     }
 
     int status;
-    if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+    if (child != wait(&status)) {
+        fprintf(stderr, "Error waiting for CRIU: %s\n", strerror(errno));
+        print_command_args_to_stderr(args);
+        kickjvm(jvm, -1);
+    } else if (!WIFEXITED(status)) {
+        fprintf(stderr, "CRIU has not properly exited, waitpid status was %d - check %s\n", status, path_abs2(imagedir, log_local));
+        print_command_args_to_stderr(args);
+        kickjvm(jvm, -1);
+    } else if (WEXITSTATUS(status)) {
+        if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
+            fprintf(stderr, "CRIU failed with exit code %d - check %s\n", WEXITSTATUS(status), path_abs2(imagedir, log_local));
+            print_command_args_to_stderr(args);
+        }
         kickjvm(jvm, -1);
     } else if (leave_running) {
         kickjvm(jvm, 0);
     }
 
-    create_cppath(imagedir);
     exit(0);
 }
 
@@ -152,48 +223,6 @@ static int restore(const char *basedir,
         const char *self,
         const char *criu,
         const char *imagedir) {
-    char *cppathpath;
-    if (-1 == asprintf(&cppathpath, "%s/cppath", imagedir)) {
-        return 1;
-    }
-
-    int fd = open(cppathpath, O_RDONLY);
-    if (fd < 0) {
-        perror("open cppath");
-        return 1;
-    }
-
-    char cppath[PATH_MAX];
-    int cppathlen = 0;
-    int r;
-    while ((r = read(fd, cppath + cppathlen, sizeof(cppath) - cppathlen - 1)) != 0) {
-        if (r < 0 && errno == EINTR) {
-            continue;
-        }
-        if (r < 0) {
-            perror("read cppath");
-            return 1;
-        }
-        cppathlen += r;
-    }
-    cppath[cppathlen] = '\0';
-
-    close(fd);
-
-    char *inherit_perfdata = NULL;
-    char *perfdatapath;
-    if (-1 == asprintf(&perfdatapath, "%s/" PERFDATA_NAME, imagedir)) {
-        return 1;
-    }
-    int perfdatafd = open(perfdatapath, O_RDWR);
-    if (0 < perfdatafd) {
-        if (-1 == asprintf(&inherit_perfdata, "fd[%d]:%s/" PERFDATA_NAME,
-                    perfdatafd,
-                    cppath[0] == '/' ? cppath + 1 : cppath)) {
-            return 1;
-        }
-    }
-
     const char* args[32] = {
         criu,
         "restore",
@@ -210,10 +239,6 @@ static int restore(const char *basedir,
         *arg++ = log_file;
     }
 
-    if (inherit_perfdata) {
-        *arg++ = "--inherit-fd";
-        *arg++ = inherit_perfdata;
-    }
     const char* tail[] = {
         "--exec-cmd", "--", self, "restorewait",
         NULL
@@ -235,7 +260,9 @@ static int restore(const char *basedir,
     fflush(stderr);
 
     execv(criu, (char**)args);
-    perror("exec criu");
+    fprintf(stderr, "Cannot execute CRIU \"");
+    print_args_to_stderr(args);
+    fprintf(stderr, "\": %s\n", strerror(errno));
     return 1;
 }
 
@@ -251,33 +278,6 @@ static int post_resume(void) {
 
     char *strid = getenv("CRAC_NEW_ARGS_ID");
     return kickjvm(pid, strid ? atoi(strid) : 0);
-}
-
-static int create_cppath(const char *imagedir) {
-    char realdir[PATH_MAX];
-
-    if (!realpath(imagedir, realdir)) {
-        fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imagedir, strerror(errno));
-        return 1;
-    }
-
-    int dirfd = open(realdir, O_DIRECTORY);
-    if (dirfd < 0) {
-        fprintf(stderr, MSGPREFIX "can not open image dir %s: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-
-    int fd = openat(dirfd, "cppath", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd < 0) {
-        fprintf(stderr, MSGPREFIX "can not open file %s/cppath: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-
-    if (write(fd, realdir, strlen(realdir)) < 0) {
-        fprintf(stderr, MSGPREFIX "can not write %s/cppath: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-    return 0;
 }
 
 static void sighandler(int sig, siginfo_t *info, void *uc) {
