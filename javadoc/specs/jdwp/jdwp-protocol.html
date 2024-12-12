@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <title>Java(tm) Debug Wire Protocol</title>
-<style>
+<link rel="stylesheet" href="../../resources/jdk-default.css"/><style>
 body { background-color:white; }
 table { border: 1px solid grey; border-spacing:0px; border-collapse: separate; width: 90%; }
 td, th { padding: 3px; border: 1px solid black; font-weight: normal; text-align: left; }
@@ -16,7 +16,7 @@ td, th { padding: 3px; border: 1px solid black; font-weight: normal; text-align:
 .indent4 { padding-left: 160px; }
 </style>
 </head>
-<body> <header class="draft-header">This specification is not final and is subject to change. Use is subject to <a href="https://www.oracle.com/java/javase/terms/license/java17speclicense.html">license terms</a>.</header>
+<body> <header class="draft-header" role="banner">This specification is not final and is subject to change. Use is subject to <a href="https://www.oracle.com/java/javase/terms/license/java24speclicense.html">license terms</a>.</header><header id="title-block-header"> <div class="navbar"> <div></div> <nav><ul><li><a href="../../api/index.html">API</a> <li><a href="../index.html">OTHER SPECIFICATIONS</a> <li><a href="../man/index.html">TOOL GUIDES</a></ul></nav> </div> </header>
 <header>
 <h1 id="Protocol_Details">Java Debug Wire Protocol Details</h1>
 </header>
@@ -125,6 +125,7 @@ td, th { padding: 3px; border: 1px solid black; font-weight: normal; text-align:
         <li><a href="#JDWP_ThreadReference_SuspendCount">SuspendCount</a> (12)
         <li><a href="#JDWP_ThreadReference_OwnedMonitorsStackDepthInfo">OwnedMonitorsStackDepthInfo</a> (13)
         <li><a href="#JDWP_ThreadReference_ForceEarlyReturn">ForceEarlyReturn</a> (14)
+        <li><a href="#JDWP_ThreadReference_IsVirtual">IsVirtual</a> (15)
 </ul>
 <li><a href="#JDWP_ThreadGroupReference">ThreadGroupReference</a> Command Set (12)
 <ul>
@@ -343,7 +344,7 @@ Returns reference types for all classes currently loaded by the target VM. See <
 </table>
 </dd></dl>
 <h3 id="JDWP_VirtualMachine_AllThreads">AllThreads Command (4)</h3>
-Returns all threads currently running in the target VM . The returned list contains threads created through java.lang.Thread, all native threads attached to the target VM through JNI, and system threads created by the target VM. Threads that have not yet been started and threads that have completed their execution are not included in the returned list. 
+Returns the live threads in the target VM. Threads that have not yet started or threads that have terminated are not included in the list.<p>The returned list contains a threadID for each live <a href=../../api/java.base/java/lang/Thread.html#platform-threads>platform thread</a> in the target VM. This includes platform threads created with the Thread API and all native threads attached to the target VM with JNI code.<p>It is implementation dependent if the list contains threadIDs for live <a href=../../api/java.base/java/lang/Thread.html#virtual-threads>virtual threads</a> in the target VM. The target VM may not return threadIDs for virtual threads, or it may be configured to return a threadID for some or all virtual threads.
 <dl>
 <dt>Out Data
 <dd>
@@ -417,7 +418,7 @@ Returns all thread groups that do not have a parent. This command may be used as
 </table>
 </dd></dl>
 <h3 id="JDWP_VirtualMachine_Dispose">Dispose Command (6)</h3>
-Invalidates this virtual machine mirror. The communication channel to the target VM is closed, and the target VM prepares to accept another subsequent connection from this debugger or another debugger, including the following tasks: <ul><li>All event requests are cancelled. <li>All threads suspended by the thread-level <a href="#JDWP_ThreadReference_Resume">resume</a> command or the VM-level <a href="#JDWP_VirtualMachine_Resume">resume</a> command are resumed as many times as necessary for them to run. <li>Garbage collection is re-enabled in all cases where it was <a href="#JDWP_ObjectReference_DisableCollection">disabled</a> </ul>Any current method invocations executing in the target VM are continued after the disconnection. Upon completion of any such method invocation, the invoking thread continues from the location where it was originally stopped. <p>Resources originating in  this VirtualMachine (ObjectReferences, ReferenceTypes, etc.) will become invalid. 
+Invalidates this virtual machine mirror. The communication channel to the target VM is closed, and the target VM prepares to accept another subsequent connection from this debugger or another debugger, including the following tasks: <ul><li>All event requests are cancelled. <li>All threads suspended by the thread-level <a href="#JDWP_ThreadReference_Suspend">suspend</a> command or the VM-level <a href="#JDWP_VirtualMachine_Suspend">suspend</a> command are resumed as many times as necessary for them to run. <li>Garbage collection is re-enabled in all cases where it was <a href="#JDWP_ObjectReference_DisableCollection">disabled</a> </ul>Any current method invocations executing in the target VM are continued after the disconnection. Upon completion of any such method invocation, the invoking thread continues from the location where it was originally stopped. <p>Resources originating in  this VirtualMachine (ObjectReferences, ReferenceTypes, etc.) will become invalid. 
 <dl>
 <dt>Out Data
 <dd>
@@ -480,7 +481,7 @@ Returns the sizes of variably-sized data types in the target VM.The returned val
 </table>
 </dd></dl>
 <h3 id="JDWP_VirtualMachine_Suspend">Suspend Command (8)</h3>
-Suspends the execution of the application running in the target VM. All Java threads currently running will be suspended. <p>Unlike java.lang.Thread.suspend, suspends of both the virtual machine and individual threads are counted. Before a thread will run again, it must be resumed through the <a href="#JDWP_VirtualMachine_Resume">VM-level resume</a> command or the <a href="#JDWP_ThreadReference_Resume">thread-level resume</a> command the same number of times it has been suspended. 
+Suspends the execution of the application running in the target VM. All Java threads currently running will be suspended. <p>Suspends of both the virtual machine and individual threads are counted. Before a thread will run again, it must be resumed through the <a href="#JDWP_VirtualMachine_Resume">VM-level resume</a> command or the <a href="#JDWP_ThreadReference_Resume">thread-level resume</a> command the same number of times it has been suspended. 
 <dl>
 <dt>Out Data
 <dd>
@@ -2255,7 +2256,7 @@ Sets the value of one or more static fields. Each field must be member of the cl
 </table>
 </dd></dl>
 <h3 id="JDWP_ClassType_InvokeMethod">InvokeMethod Command (3)</h3>
-Invokes a static method. The method must be member of the class type or one of its superclasses. Access control is not enforced; for example, private methods can be invoked.<p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by command. This is done to prevent the deadlocks that will occur if any of the threads own monitors that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
+Invokes a static method. The method must be member of the class type or one of its superclasses. Access control is not enforced; for example, private methods can be invoked.<p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own resources, such as monitors, that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
 <dl>
 <dt>Out Data
 <dd>
@@ -2326,13 +2327,13 @@ Invokes a static method. The method must be member of the class type or one of i
 <tr><th scope="row"><a href="#Error_INVALID_CLASS">INVALID_CLASS</a><td>clazz is not the ID of a class.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>clazz is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_METHODID">INVALID_METHODID</a><td>methodID is not the ID of a static method in this class type or one of its superclasses.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_ClassType_NewInstance">NewInstance Command (4)</h3>
-Creates a new object of this type, invoking the specified constructor. The constructor method ID must be a member of the class type.<p>Instance creation will occur in the specified thread. Instance creation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified constructor is invoked with the arguments in the specified argument list. The constructor invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the constructor throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by command. This is done to prevent the deadlocks that will occur if any of the threads own monitors that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
+Creates a new object of this type, invoking the specified constructor. The constructor method ID must be a member of the class type.<p>Instance creation will occur in the specified thread. Instance creation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified constructor is invoked with the arguments in the specified argument list. The constructor invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the constructor throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own resources, such as monitors, that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
 <dl>
 <dt>Out Data
 <dd>
@@ -2404,7 +2405,7 @@ Creates a new object of this type, invoking the specified constructor. The const
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>clazz is not a known ID or a value of an object parameter is not a known ID..&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_METHODID">INVALID_METHODID</a><td>methodID is not the ID of a method.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -2460,7 +2461,7 @@ Creates a new array object of this type with a given length.
 <h2 id="JDWP_InterfaceType">InterfaceType Command Set (5)</h2>
 
 <h3 id="JDWP_InterfaceType_InvokeMethod">InvokeMethod Command (1)</h3>
-Invokes a static method. The method must not be a static initializer. The method must be a member of the interface type. <p>Since JDWP version 1.8 <p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own monitors that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
+Invokes a static method. The method must not be a static initializer. The method must be a member of the interface type. <p>Since JDWP version 1.8 <p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must exist a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own resources, such as monitors, that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
 <dl>
 <dt>Out Data
 <dd>
@@ -2531,7 +2532,7 @@ Invokes a static method. The method must not be a static initializer. The method
 <tr><th scope="row"><a href="#Error_INVALID_CLASS">INVALID_CLASS</a><td>clazz is not the ID of an interface.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>clazz is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_METHODID">INVALID_METHODID</a><td>methodID is not the ID of a static method in this interface type or is the ID of a static initializer.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3066,17 +3067,17 @@ Returns monitor information for an object. All threads int the VM must be suspen
 <tr>
 <td>threadID
 <th scope="row"><i>owner</i>
-<td>The monitor owner, or null if it is not currently owned.&nbsp;
+<td>The platform thread owning this monitor, or null if owned by a virtual thread or not owned.&nbsp;
 </tr>
 <tr>
 <td>int
 <th scope="row"><i>entryCount</i>
-<td>The number of times the monitor has been entered.&nbsp;
+<td>The number of times the owning platform thread has entered the monitor, or 0 if owned by a virtual thread or not owned.&nbsp;
 </tr>
 <tr>
 <td>int
 <th scope="row"><i>waiters</i>
-<td>The number of threads that are waiting for the monitor 0 if there is no current owner&nbsp;
+<td>The total number of platform threads that are waiting to enter or re-enter the monitor, or waiting to be notified by the monitor, or 0 if only virtual threads are waiting or no threads are waiting.&nbsp;
 </tr>
 <tr>
 <th colspan="3" scope="rowgroup">Repeated <i>waiters</i> times:
@@ -3084,7 +3085,7 @@ Returns monitor information for an object. All threads int the VM must be suspen
 <tr>
 <td><div class="indent1">threadID</div>
 <th scope="row"><i>thread</i>
-<td>A thread waiting for this monitor.&nbsp;
+<td>A platform thread waiting for this monitor.&nbsp;
 </tr>
 </table>
 </dd>
@@ -3099,7 +3100,7 @@ Returns monitor information for an object. All threads int the VM must be suspen
 </table>
 </dd></dl>
 <h3 id="JDWP_ObjectReference_InvokeMethod">InvokeMethod Command (6)</h3>
-Invokes a instance method. The method must be member of the object's type or one of its superclasses, superinterfaces, or implemented interfaces. Access control is not enforced; for example, private methods can be invoked.<p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must be a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own monitors that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
+Invokes a instance method. The method must be member of the object's type or one of its superclasses, superinterfaces, or implemented interfaces. Access control is not enforced; for example, private methods can be invoked.<p>The method invocation will occur in the specified thread. Method invocation can occur only if the specified thread has been suspended by an event. Method invocation is not supported when the target VM has been suspended by the front-end. <p>The specified method is invoked with the arguments in the specified argument list. The method invocation is synchronous; the reply packet is not sent until the invoked method returns in the target VM. The return value (possibly the void value) is included in the reply packet. If the invoked method throws an exception, the exception object ID is set in the reply packet; otherwise, the exception object ID is null. <p>For primitive arguments, the argument value's type must match the argument's type exactly. For object arguments, there must be a widening reference conversion from the argument value's type to the argument's type and the argument's type must be loaded. <p>By default, all threads in the target VM are resumed while the method is being invoked if they were previously suspended by an event or by a command. This is done to prevent the deadlocks that will occur if any of the threads own resources, such as monitors, that will be needed by the invoked method. It is possible that breakpoints or other events might occur during the invocation. Note, however, that this implicit resume acts exactly like the ThreadReference resume command, so if the thread's suspend count is greater than 1, it will remain in a suspended state during the invocation. By default, when the invocation completes, all threads in the target VM are suspended, regardless their state before the invocation. <p>The resumption of other threads during the invoke can be prevented by specifying the INVOKE_SINGLE_THREADED bit flag in the <code>options</code> field; however, there is no protection against or recovery from the deadlocks described above, so this option should be used with great caution. Only the specified thread will be resumed (as described for all threads above). Upon completion of a single threaded invoke, the invoking thread will be suspended once again. Note that any threads started during the single threaded invocation will not be suspended when the invocation completes. <p>If the target VM is disconnected during the invoke (for example, through the VirtualMachine dispose command) the method invocation continues. 
 <dl>
 <dt>Out Data
 <dd>
@@ -3175,7 +3176,7 @@ Invokes a instance method. The method must be member of the object's type or one
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_CLASS">INVALID_CLASS</a><td>clazz is not the ID of a reference type.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_METHODID">INVALID_METHODID</a><td>methodID is not the ID of an instance method in this object's type or one of its superclasses, superinterfaces, or implemented interfaces.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3415,13 +3416,13 @@ Returns the thread name.
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_ThreadReference_Suspend">Suspend Command (2)</h3>
-Suspends the thread. <p>Unlike java.lang.Thread.suspend(), suspends of both the virtual machine and individual threads are counted. Before a thread will run again, it must be resumed the same number of times it has been suspended. <p>Suspending single threads with command has the same dangers java.lang.Thread.suspend(). If the suspended thread holds a monitor needed by another running thread, deadlock is possible in the target VM (at least until the suspended thread is resumed again). <p>The suspended thread is guaranteed to remain suspended until resumed through one of the JDI resume methods mentioned above; the application in the target VM cannot resume the suspended thread through {@link java.lang.Thread#resume}. <p>Note that this doesn't change the status of the thread (see the <a href="#JDWP_ThreadReference_Status">ThreadStatus</a> command.) For example, if it was Running, it will still appear running to other threads. 
+Suspends the thread. <p>Suspends of both the virtual machine and individual threads are counted. Before a thread will run again, it must be resumed the same number of times it has been suspended. <p>Suspending single threads is inherently deadlock-prone. If the suspended thread holds a monitor needed by another running thread, deadlock is possible in the target VM (at least until the suspended thread is resumed again). <p>The suspended thread is guaranteed to remain suspended until resumed through one of the JDI resume methods mentioned above. <p>Note that this doesn't change the status of the thread (see the <a href="#JDWP_ThreadReference_Status">ThreadStatus</a> command.) For example, if it was Running, it will still appear running to other threads. 
 <dl>
 <dt>Out Data
 <dd>
@@ -3446,7 +3447,7 @@ Suspends the thread. <p>Unlike java.lang.Thread.suspend(), suspends of both the 
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3477,7 +3478,7 @@ Resumes the execution of a given thread. If this thread was not previously suspe
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3523,7 +3524,7 @@ Returns the current status of a thread. The thread status reply indicates the th
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3564,7 +3565,7 @@ Returns the thread group that contains a given thread.
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3628,7 +3629,7 @@ Returns the current call stack of a suspended thread. The sequence of frames sta
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3669,7 +3670,7 @@ Returns the count of frames on this thread's stack. The thread must be suspended
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3718,14 +3719,14 @@ Returns the objects whose monitors have been entered by this thread. The thread 
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NOT_IMPLEMENTED">NOT_IMPLEMENTED</a><td>The functionality is not implemented in this virtual machine.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_ThreadReference_CurrentContendedMonitor">CurrentContendedMonitor Command (9)</h3>
-Returns the object, if any, for which this thread is waiting. The thread may be waiting to enter a monitor, or it may be waiting, via the java.lang.Object.wait method, for another thread to invoke the notify method. The thread must be suspended, and the returned information is relevant only while the thread is suspended. Requires canGetCurrentContendedMonitor capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
+Returns the object, if any, for which this thread is waiting. The thread may be waiting to enter the object's monitor, or in java.lang.Object.wait waiting to re-enter the monitor after being notified, interrupted, or timed-out.The thread must be suspended, and the returned information is relevant only while the thread is suspended. Requires canGetCurrentContendedMonitor capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
 <dl>
 <dt>Out Data
 <dd>
@@ -3760,14 +3761,14 @@ Returns the object, if any, for which this thread is waiting. The thread may be 
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NOT_IMPLEMENTED">NOT_IMPLEMENTED</a><td>The functionality is not implemented in this virtual machine.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_ThreadReference_Stop">Stop Command (10)</h3>
-Stops the thread with an asynchronous exception. 
+Stops the thread with an asynchronous exception. <p>This command may be used to send an asynchronous exception to a virtual thread when it is suspended at an event. An implementation may support sending an asynchronous exception to a suspended virtual thread in other cases.
 <dl>
 <dt>Out Data
 <dd>
@@ -3797,7 +3798,9 @@ Stops the thread with an asynchronous exception.
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null, not a valid thread, or the thread is not alive.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>The thread is a virtual thread and was not suspended.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_OPAQUE_FRAME">OPAQUE_FRAME</a><td>The thread is a suspended virtual thread and the implementation was unable to throw an asynchronous exception from the thread's current frame.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If thread is not a known ID or the asynchronous exception has been garbage collected.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3828,7 +3831,7 @@ Interrupt the thread, as if done by java.lang.Thread.interrupt
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null, not a valid thread, or the thread is not alive.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3869,7 +3872,7 @@ Get the suspend count for this thread. The suspend count is the  number of times
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -3923,14 +3926,14 @@ Returns monitor objects owned by the thread, along with stack depth at which the
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NOT_IMPLEMENTED">NOT_IMPLEMENTED</a><td>The functionality is not implemented in this virtual machine.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_ThreadReference_ForceEarlyReturn">ForceEarlyReturn Command (14)</h3>
-Force a method to return before it reaches a return statement.  <p>The method which will return early is referred to as the called method. The called method is the current method (as defined by the Frames section in <cite>The Java Virtual Machine Specification</cite>) for the specified thread at the time this command is received. <p>The specified thread must be suspended. The return occurs when execution of Java programming language code is resumed on this thread. Between sending this command and resumption of thread execution, the state of the stack is undefined. <p>No further instructions are executed in the called method. Specifically, finally blocks are not executed. Note: this can cause inconsistent states in the application. <p>A lock acquired by calling the called method (if it is a synchronized method) and locks acquired by entering synchronized blocks within the called method are released. Note: this does not apply to JNI locks or java.util.concurrent.locks locks. <p>Events, such as MethodExit, are generated as they would be in a normal return. <p>The called method must be a non-native Java programming language method. Forcing return on a thread with only one frame on the stack causes the thread to exit when resumed. <p>For void methods, the value must be a void value. For methods that return primitive values, the value's type must match the return type exactly.  For object values, there must be a widening reference conversion from the value's type to the return type type and the return type must be loaded. <p>Since JDWP version 1.6. Requires canForceEarlyReturn capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
+Force a method to return before it reaches a return statement.  <p>The method which will return early is referred to as the called method. The called method is the current method (as defined by the Frames section in <cite>The Java Virtual Machine Specification</cite>) for the specified thread at the time this command is received. <p>The specified thread must be suspended. The return occurs when execution of Java programming language code is resumed on this thread. Between sending this command and resumption of thread execution, the state of the stack is undefined. <p>This command may be used to force a return from the current frame of a virtual thread when it is suspended at an event. An implementation may support forcing a return from the current frame of a suspended virtual thread in other cases.<p>No further instructions are executed in the called method. Specifically, finally blocks are not executed. Note: this can cause inconsistent states in the application. <p>A lock acquired by calling the called method (if it is a synchronized method) and locks acquired by entering synchronized blocks within the called method are released. Note: this does not apply to JNI locks or java.util.concurrent.locks locks. <p>Events, such as MethodExit, are generated as they would be in a normal return. <p>The called method must be a non-native Java programming language method. Forcing return on a thread with only one frame on the stack causes the thread to exit when resumed. <p>For void methods, the value must be a void value. For methods that return primitive values, the value's type must match the return type exactly.  For object values, there must be a widening reference conversion from the value's type to the return type type and the return type must be loaded. <p>Since JDWP version 1.6. Requires canForceEarlyReturn capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
 <dl>
 <dt>Out Data
 <dd>
@@ -3960,19 +3963,59 @@ Force a method to return before it reaches a return statement.  <p>The method wh
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null, not a valid thread, or the thread is not alive.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>Thread or value is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_THREAD_NOT_ALIVE">THREAD_NOT_ALIVE</a><td>Thread has not been started or is now dead.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_OPAQUE_FRAME">OPAQUE_FRAME</a><td>Attempted to return early from a frame corresponding to a native method. Or the implementation is unable to provide this functionality on this frame.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_OPAQUE_FRAME">OPAQUE_FRAME</a><td>Attempted to return early from a frame corresponding to a native method, the thread is a suspended virtual thread and the target VM is unable to force its current frame to return, or the implementation is unable to provide this functionality on this frame.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NO_MORE_FRAMES">NO_MORE_FRAMES</a><td>There are no more Java or JNI frames on the call stack.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NOT_IMPLEMENTED">NOT_IMPLEMENTED</a><td>The functionality is not implemented in this virtual machine.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_TYPE_MISMATCH">TYPE_MISMATCH</a><td>Value is not an appropriate type for the return value of the method.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
+<h3 id="JDWP_ThreadReference_IsVirtual">IsVirtual Command (15)</h3>
+Determine if a thread is a <a href=../../api/java.base/java/lang/Thread.html#virtual-threads>virtual thread</a>.<p>Since JDWP version 21.
+<dl>
+<dt>Out Data
+<dd>
+<table><tr>
+<th class="bold" style="width: 20%" scope="col">Type
+<th class="bold" style="width: 15%" scope="col">Name
+<th class="bold" style="width: 65%" scope="col">Description
+</tr>
+<tr>
+<td>threadID
+<th scope="row"><i>thread</i>
+<td>The thread object ID.&nbsp;
+</tr>
+</table>
+</dd>
+<dt>Reply Data
+<dd>
+<table><tr>
+<th class="bold" style="width: 20%" scope="col">Type
+<th class="bold" style="width: 15%" scope="col">Name
+<th class="bold" style="width: 65%" scope="col">Description
+</tr>
+<tr>
+<td>boolean
+<th scope="row"><i>isVirtual</i>
+<td>true if the thread is a virtual thread.&nbsp;
+</tr>
+</table>
+</dd>
+<dt>Error Data</dt>
+<dd><table><tr>
+<th class="bold" style="width: 20%" scope="col">Value
+<th class="bold" scope="col">Description
+</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
+</table>
+</dd></dl>
 <h2 id="JDWP_ThreadGroupReference">ThreadGroupReference Command Set (12)</h2>
-
+See <a href=../../api/java.base/java/lang/ThreadGroup.html>java.lang.ThreadGroup</a>.
 <h3 id="JDWP_ThreadGroupReference_Name">Name Command (1)</h3>
 Returns the thread group name. 
 <dl>
@@ -4056,7 +4099,7 @@ Returns the thread group, if any, which contains a given thread group.
 </table>
 </dd></dl>
 <h3 id="JDWP_ThreadGroupReference_Children">Children Command (3)</h3>
-Returns the live threads and active thread groups directly contained in this thread group. Threads and thread groups in child thread groups are not included. A thread is alive if it has been started and has not yet been stopped. See <a href=../../api/java.base/java/lang/ThreadGroup.html>java.lang.ThreadGroup </a>for information about active ThreadGroups.
+Returns the live platform threads and the thread groups directly contained in this thread group. Virtual threads are not included. Threads and thread groups in child thread groups are not included. A thread is alive if it has been started and has not yet terminated.
 <dl>
 <dt>Out Data
 <dd>
@@ -4486,6 +4529,10 @@ Set an event request. When the event described by this request occurs, an <a hre
 <th scope="row"><i>sourceNamePattern</i>
 <td>Required source name pattern. Matches are limited to exact matches of the given pattern and matches of patterns that begin or end with '*'; for example, "*.Foo" or "java.*". &nbsp;
 </tr>
+<tr>
+<th colspan="2" scope="row"><div class="indent1">Case PlatformThreadsOnly - if <i>modKind</i> is 13:</div>
+<td>For thread start and thread end events, restrict the events so they are only sent for platform threads.<p>Since JDWP version 21.&nbsp;
+</tr>
 </table>
 </dd>
 <dt>Reply Data
@@ -4507,7 +4554,7 @@ Set an event request. When the event described by this request occurs, an <a hre
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_CLASS">INVALID_CLASS</a><td>Invalid class.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_STRING">INVALID_STRING</a><td>The string is invalid.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
@@ -4643,7 +4690,7 @@ Returns the value of one or more local variables in a given frame. Each variable
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_FRAMEID">INVALID_FRAMEID</a><td>Invalid jframeID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_SLOT">INVALID_SLOT</a><td>Invalid slot.&nbsp;</tr>
@@ -4651,7 +4698,7 @@ Returns the value of one or more local variables in a given frame. Each variable
 </table>
 </dd></dl>
 <h3 id="JDWP_StackFrame_SetValues">SetValues Command (2)</h3>
-Sets the value of one or more local variables. Each variable must be visible at the current frame code index. For primitive values, the value's type must match the variable's type exactly. For object values, there must be a widening reference conversion from the value's type to thevariable's type and the variable's type must be loaded. <p>Even if local variable information is not available, values can be set, if the front-end is able to determine the correct local variable index. (Typically, thisindex can be determined for method arguments from the method signature without access to the local variable table information.) 
+Sets the value of one or more local variables. Each variable must be visible at the current frame code index. For primitive values, the value's type must match the variable's type exactly. For object values, there must be a widening reference conversion from the value's type to thevariable's type and the variable's type must be loaded. <p>Even if local variable information is not available, values can be set, if the front-end is able to determine the correct local variable index. (Typically, thisindex can be determined for method arguments from the method signature without access to the local variable table information.) <p>If the thread is a virtual thread then this command can be used to set the value of local variables in the top-most frame when the thread is suspended at an event. The target VM may support setting local variables in other cases.
 <dl>
 <dt>Out Data
 <dd>
@@ -4699,9 +4746,10 @@ Sets the value of one or more local variables. Each variable must be visible at 
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_FRAMEID">INVALID_FRAMEID</a><td>Invalid jframeID.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_OPAQUE_FRAME">OPAQUE_FRAME</a><td>The thread is a suspended virtual thread and the target VM does not support setting the value of local variables in the frame.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
@@ -4746,14 +4794,14 @@ Returns the value of the 'this' reference for this frame. If the frame's method 
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_FRAMEID">INVALID_FRAMEID</a><td>Invalid jframeID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
 </dd></dl>
 <h3 id="JDWP_StackFrame_PopFrames">PopFrames Command (4)</h3>
-Pop the top-most stack frames of the thread stack, up to, and including 'frame'. The thread must be suspended to perform this command. The top-most stack frames are discarded and the stack frame previous to 'frame' becomes the current frame. The operand stack is restored -- the argument values are added back and if the invoke was not <code>invokestatic</code>, <code>objectref</code> is added back as well. The Java virtual machine program counter is restored to the opcode of the invoke instruction.<p>Since JDWP version 1.4. Requires canPopFrames capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
+Pop the top-most stack frames of the thread stack, up to, and including 'frame'. The thread must be suspended to perform this command. The top-most stack frames are discarded and the stack frame previous to 'frame' becomes the current frame. The operand stack is restored -- the argument values are added back and if the invoke was not <code>invokestatic</code>, <code>objectref</code> is added back as well. The Java virtual machine program counter is restored to the opcode of the invoke instruction.<p>This command may be used to pop frames of a virtual thread when it is suspended at an event. An implementation may support popping the frames of a suspended virtual thread in other cases.<p>Since JDWP version 1.4. Requires canPopFrames capability - see <a href="#JDWP_VirtualMachine_CapabilitiesNew">CapabilitiesNew</a>.
 <dl>
 <dt>Out Data
 <dd>
@@ -4783,12 +4831,12 @@ Pop the top-most stack frames of the thread stack, up to, and including 'frame'.
 <th class="bold" style="width: 20%" scope="col">Value
 <th class="bold" scope="col">Description
 </tr>
-<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_INVALID_THREAD">INVALID_THREAD</a><td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_OBJECT">INVALID_OBJECT</a><td>thread is not a known ID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_INVALID_FRAMEID">INVALID_FRAMEID</a><td>Invalid jframeID.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_THREAD_NOT_SUSPENDED">THREAD_NOT_SUSPENDED</a><td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NO_MORE_FRAMES">NO_MORE_FRAMES</a><td>There are no more Java or JNI frames on the call stack.&nbsp;</tr>
-<tr><th scope="row"><a href="#Error_INVALID_FRAMEID">INVALID_FRAMEID</a><td>Invalid jframeID.&nbsp;</tr>
+<tr><th scope="row"><a href="#Error_OPAQUE_FRAME">OPAQUE_FRAME</a><td>If one or more of the frames to pop is a native method or its caller is a native method, or the thread is a suspended virtual thread and the implementation was unable to pop the frames.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_NOT_IMPLEMENTED">NOT_IMPLEMENTED</a><td>The functionality is not implemented in this virtual machine.&nbsp;</tr>
 <tr><th scope="row"><a href="#Error_VM_DEAD">VM_DEAD</a><td>The virtual machine is not running.&nbsp;</tr>
 </table>
@@ -4961,7 +5009,7 @@ Several events may occur at a given time in the target VM. For example, there ma
 <tr>
 <td><div class="indent2">int</div>
 <th scope="row"><i>requestID</i>
-<td>Request that generated event (or 0 if this event is automatically generated.&nbsp;
+<td>Request that generated event, or 0 if this event is automatically generated.&nbsp;
 </tr>
 <tr>
 <td><div class="indent2">threadID</div>
@@ -5382,12 +5430,12 @@ Several events may occur at a given time in the target VM. For example, there ma
 <th class="bold" style="width: 65%" scope="col">Description
 </tr>
 <tr><th scope="row"><span id="Error_NONE"></span>NONE<td class="centered">0<td>No error has occurred.&nbsp;</tr>
-<tr><th scope="row"><span id="Error_INVALID_THREAD"></span>INVALID_THREAD<td class="centered">10<td>Passed thread is null, is not a valid thread or has exited.&nbsp;</tr>
+<tr><th scope="row"><span id="Error_INVALID_THREAD"></span>INVALID_THREAD<td class="centered">10<td>The thread is null or not a valid thread.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_THREAD_GROUP"></span>INVALID_THREAD_GROUP<td class="centered">11<td>Thread group invalid.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_PRIORITY"></span>INVALID_PRIORITY<td class="centered">12<td>Invalid priority.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_THREAD_NOT_SUSPENDED"></span>THREAD_NOT_SUSPENDED<td class="centered">13<td>If the specified thread has not been suspended by an event.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_THREAD_SUSPENDED"></span>THREAD_SUSPENDED<td class="centered">14<td>Thread already suspended.&nbsp;</tr>
-<tr><th scope="row"><span id="Error_THREAD_NOT_ALIVE"></span>THREAD_NOT_ALIVE<td class="centered">15<td>Thread has not been started or is now dead.&nbsp;</tr>
+<tr><th scope="row"><span id="Error_THREAD_NOT_ALIVE"></span>THREAD_NOT_ALIVE<td class="centered">15<td>Not used.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_OBJECT"></span>INVALID_OBJECT<td class="centered">20<td>If this reference type has been unloaded and garbage collected.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_CLASS"></span>INVALID_CLASS<td class="centered">21<td>Invalid class.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_CLASS_NOT_PREPARED"></span>CLASS_NOT_PREPARED<td class="centered">22<td>Class has been loaded but not yet prepared.&nbsp;</tr>
@@ -5396,7 +5444,7 @@ Several events may occur at a given time in the target VM. For example, there ma
 <tr><th scope="row"><span id="Error_INVALID_FIELDID"></span>INVALID_FIELDID<td class="centered">25<td>Invalid field.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_FRAMEID"></span>INVALID_FRAMEID<td class="centered">30<td>Invalid jframeID.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_NO_MORE_FRAMES"></span>NO_MORE_FRAMES<td class="centered">31<td>There are no more Java or JNI frames on the call stack.&nbsp;</tr>
-<tr><th scope="row"><span id="Error_OPAQUE_FRAME"></span>OPAQUE_FRAME<td class="centered">32<td>Information about the frame is not available.&nbsp;</tr>
+<tr><th scope="row"><span id="Error_OPAQUE_FRAME"></span>OPAQUE_FRAME<td class="centered">32<td>Information about the frame is not available (e.g. native frame) or the target VM is unable to perform an operation on the thread's current frame.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_NOT_CURRENT_FRAME"></span>NOT_CURRENT_FRAME<td class="centered">33<td>Operation can only be performed on current frame.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_TYPE_MISMATCH"></span>TYPE_MISMATCH<td class="centered">34<td>The variable is not an appropriate type for the function used.&nbsp;</tr>
 <tr><th scope="row"><span id="Error_INVALID_SLOT"></span>INVALID_SLOT<td class="centered">35<td>Invalid slot.&nbsp;</tr>
@@ -5481,11 +5529,11 @@ Several events may occur at a given time in the target VM. For example, there ma
 <th class="centered bold" style="width: 5%" scope="col">Value
 <th class="bold" style="width: 65%" scope="col">Description
 </tr>
-<tr><th scope="row"><span id="ThreadStatus_ZOMBIE"></span>ZOMBIE<td class="centered">0<td>&nbsp;</tr>
-<tr><th scope="row"><span id="ThreadStatus_RUNNING"></span>RUNNING<td class="centered">1<td>&nbsp;</tr>
-<tr><th scope="row"><span id="ThreadStatus_SLEEPING"></span>SLEEPING<td class="centered">2<td>&nbsp;</tr>
-<tr><th scope="row"><span id="ThreadStatus_MONITOR"></span>MONITOR<td class="centered">3<td>&nbsp;</tr>
-<tr><th scope="row"><span id="ThreadStatus_WAIT"></span>WAIT<td class="centered">4<td>&nbsp;</tr>
+<tr><th scope="row"><span id="ThreadStatus_ZOMBIE"></span>ZOMBIE<td class="centered">0<td>Thread has terminated.&nbsp;</tr>
+<tr><th scope="row"><span id="ThreadStatus_RUNNING"></span>RUNNING<td class="centered">1<td>Thread is runnable.&nbsp;</tr>
+<tr><th scope="row"><span id="ThreadStatus_SLEEPING"></span>SLEEPING<td class="centered">2<td>Thread is sleeping, in Thread.sleep.&nbsp;</tr>
+<tr><th scope="row"><span id="ThreadStatus_MONITOR"></span>MONITOR<td class="centered">3<td>Thread is waiting to enter a synchronized block/method or, after an Object.wait, waiting to re-enter a synchronized block/method.&nbsp;</tr>
+<tr><th scope="row"><span id="ThreadStatus_WAIT"></span>WAIT<td class="centered">4<td>Thread is waiting, in Object.wait or LockSupport.park. A virtual thread that is sleeping in Thread.sleep may have this thread status instead of SLEEPING.&nbsp;</tr>
 </table>
 <h2 id="JDWP_SuspendStatus">SuspendStatus Constants</h2>
 
@@ -5586,4 +5634,4 @@ The invoke options are a combination of zero or more of the following bit flags:
 <tr><th scope="row"><span id="InvokeOptions_INVOKE_NONVIRTUAL"></span>INVOKE_NONVIRTUAL<td class="centered">0x02<td>otherwise, normal virtual invoke (instance methods only)&nbsp;</tr>
 </table>
 </main>
-<footer class="legal-footer"><hr/><a href="../../legal/copyright.html">Copyright</a> &copy; 1993, 2023, Oracle and/or its affiliates, 500 Oracle Parkway, Redwood Shores, CA 94065 USA.<br>All rights reserved. Use is subject to <a href="https://www.oracle.com/java/javase/terms/license/java17speclicense.html">license terms</a> and the <a href="https://www.oracle.com/technetwork/java/redist-137594.html">documentation redistribution policy</a>. <br><strong>DRAFT 17-crac+6-21</strong> <!-- Version 17-crac+6-21 --></footer></body></html>
+<footer class="legal-footer"><hr/><a href="../../legal/copyright.html">Copyright</a> &copy; 1993, 2024, Oracle and/or its affiliates, 500 Oracle Parkway, Redwood Shores, CA 94065 USA.<br>All rights reserved. Use is subject to <a href="https://www.oracle.com/java/javase/terms/license/java24speclicense.html">license terms</a> and the <a href="https://www.oracle.com/technetwork/java/redist-137594.html">documentation redistribution policy</a>. <br><strong>DRAFT 24-crac+20-25</strong> <!-- Version 24-crac+20-25 --></footer></body></html>
